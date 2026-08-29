@@ -5,7 +5,7 @@ then use these commands in terminal to start backend
 
 ```bash
 source .venv/bin/activate
-uvicorn app.main:app --reload\
+uvicorn app.main:app --reload
 ```
 
 cd into frontend
