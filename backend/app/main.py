@@ -5,6 +5,12 @@ from app.services.llm import (
     extract_intelligence,
     transform_content,
 )
+from typing import Any
+from fastapi.responses import StreamingResponse
+from app.export.service import (
+    build_pdf,
+    build_presentation,
+)
 
 import os
 import tempfile
@@ -82,6 +88,9 @@ async def upload_source(file: UploadFile = File(...)):
 class IntelligenceRequest(BaseModel):
     text: str
 
+class ExportRequest(BaseModel):
+    output_type: str
+    content: Any
 
 @app.post("/api/v1/intelligence/analyze")
 async def analyze_intelligence(
@@ -161,3 +170,80 @@ async def transform_intelligence(
             status_code=500,
             detail=f"Transformation failed: {str(e)}"
         )
+
+@app.post("/api/v1/export")
+async def export_deliverable(
+    request: ExportRequest
+):
+    output_type = request.output_type.lower()
+
+    valid_types = {
+        "executive_summary",
+        "advisory",
+        "linkedin",
+        "x_thread",
+        "infographic",
+        "presentation",
+        "video",
+    }
+
+    if output_type not in valid_types:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported output type."
+        )
+
+    if request.content is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Content cannot be empty."
+        )
+
+    if output_type == "presentation":
+
+        if not isinstance(
+            request.content,
+            list
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Presentation content must be a list of slides."
+            )
+
+        buffer = build_presentation(
+            request.content
+        )
+
+        filename = "nexus-presentation.pptx"
+
+        return StreamingResponse(
+            buffer,
+            media_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "presentationml.presentation"
+            ),
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{filename}"'
+                )
+            },
+        )
+
+    buffer = build_pdf(
+        output_type,
+        request.content,
+    )
+
+    filename = (
+        f"nexus-{output_type}.pdf"
+    )
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{filename}"'
+            )
+        },
+    )
